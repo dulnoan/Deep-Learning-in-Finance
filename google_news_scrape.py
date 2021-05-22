@@ -37,8 +37,8 @@ for company_name in watchlist:
     story_list = []
     story_df = []
     
-    #Find URL links with "company_name" in title and announced 1 day ago 
-    search = gn.search(f'intitle:{company_name}', when = '1d')
+    #Find results with "company_name" in title
+    search = gn.search(f'intitle:{company_name}', when = '2d')
     
     print("\n\nWebscraping: ", company_name,"\n")
     
@@ -53,8 +53,8 @@ for company_name in watchlist:
 
 
     
-    #Scrape articles from dataframe list story_df['URL']. Articles are limited to 300 words
-    print('Scraping news links.')
+    #Scrape articles from dataframe list story_df['URL']. Articles are limited to 300 words (Model/Hardware Limitation).
+    print(f'Scraping {company_name} news links.')
     def scrape_and_process(URLs):
         ARTICLES = []
         for url in URLs:
@@ -72,7 +72,7 @@ for company_name in watchlist:
  
     
     #Summarise all Articles by passing in list of articles scraped.
-    print('Summarizing articles.')
+    print(f'Summarizing {company_name} articles.')
     def summarize(articles):
         summaries = []
         for article in articles:
@@ -86,7 +86,7 @@ for company_name in watchlist:
     
     
     #Apply Sentiment Analysis
-    print('Calculating sentiment.')
+    print(f'Calculating {company_name} sentiment.')
     scores = []
     sentiment = pipeline("sentiment-analysis")
     scores = sentiment(summaries)
