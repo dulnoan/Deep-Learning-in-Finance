@@ -4,40 +4,46 @@ Created on Fri May 21 15:32:48 2021
 
 @author: micud
 
-https://github.com/kotartemiy/pygooglenews
+Key packages used:
+pygooglenews = reliable package to scrape URL results to overcome beautiful soup issues on my end. https://github.com/kotartemiy/pygooglenews
+beautifulsoup = used to scrape text in webpages
+financial-summarization-pegasus = Deep Learning model that has been pretrained specifically for Financial summarization
 
 """
+
 import pandas as pd
-from pygooglenews import GoogleNews
-from transformers import PegasusTokenizer, PegasusForConditionalGeneration
 from bs4 import BeautifulSoup
 import requests
+from pygooglenews import GoogleNews
+from transformers import PegasusTokenizer, PegasusForConditionalGeneration
 from transformers import pipeline
 
+#Specify Watchlist
+watchlist = ['IQE','Trainline','Sumo Digital']
 
+#Specify Region
+gn = GoogleNews(country = 'UK')
 
-# 2. Setup AI Model
+#Setup AI Model using Pegasus which has been trained for Financial Summarization
 model_name = "human-centered-summarization/financial-summarization-pegasus"
 tokenizer = PegasusTokenizer.from_pretrained(model_name)
 model = PegasusForConditionalGeneration.from_pretrained(model_name)
 
-
-
-gn = GoogleNews(country = 'UK')
-
-watchlist = ['IQE','Trainline','Sumo Digital']
-
-
-
+#This will be the final dataframe output where results for each company will be appended
 master_df = []
 
 for company_name in watchlist:
-    print("\n\nWebscraping: ", company_name,"\n")
+
     story_list = []
     story_df = []
-    search = gn.search(f'intitle:{company_name}', when = '2d')
+    
+    #Find URL links with "company_name" in title and announced 1 day ago 
+    search = gn.search(f'intitle:{company_name}', when = '1d')
+    
+    print("\n\nWebscraping: ", company_name,"\n")
     
     
+    #Loop through dictionary 'search entries' to get Headline, URL etc and convert to a dataframe
     for item in search['entries']:
         story_info = []
         story_info = {'Headline': item.title , 'URL': item.link}
@@ -47,7 +53,7 @@ for company_name in watchlist:
 
 
     
-    # 4.3. Search and Scrape Cleaned URLs
+    #Scrape articles from dataframe list story_df['URL']. Articles are limited to 300 words
     print('Scraping news links.')
     def scrape_and_process(URLs):
         ARTICLES = []
@@ -63,11 +69,9 @@ for company_name in watchlist:
         return ARTICLES
     
     articles = scrape_and_process(list(story_df['URL'])) 
+ 
     
-    
-  
-    
-    # 4.4. Summarise all Articles
+    #Summarise all Articles by passing in list of articles scraped.
     print('Summarizing articles.')
     def summarize(articles):
         summaries = []
@@ -80,20 +84,25 @@ for company_name in watchlist:
     
     summaries = summarize(articles)
     
-    # 5. Adding Sentiment Analysis
+    
+    #Apply Sentiment Analysis
     print('Calculating sentiment.')
     scores = []
     sentiment = pipeline("sentiment-analysis")
     scores = sentiment(summaries)
     
+    
+    #Create new dataframe model_results for full & summarised text and sentiment score.
     model_results = []
     model_results = pd.DataFrame(list(zip(articles,summaries,scores)),columns =['Full Article','AI Summary', 'Sentiment Score'])
+    
 
+    #Combined web scraped information with model results into a new combined dataframe 
+    combined = []
+    combined = story_df.merge(model_results,left_index=True,right_index=True,how='outer')
     
-    final = []
-    final = story_df.merge(model_results,left_index=True,right_index=True,how='outer')
-    
-    master_df.append(final)
+    #Append to master_df with results from other companies. 
+    master_df.append(combined)
     
 master_df = pd.concat(master_df)
 master_df.to_excel("google_results.xls")
