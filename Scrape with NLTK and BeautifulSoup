@@ -10,11 +10,8 @@ url = 'https://www.fool.co.uk/investing/2021/05/21/the-trainline-share-price-ste
 article = Article(url)
 
 #Do some NLP
-
 article.download()
 article.parse()
-
-
 
 article.nlp()
 
@@ -65,6 +62,7 @@ gn = GoogleNews(country = 'UK')
 model_name = "human-centered-summarization/financial-summarization-pegasus"
 tokenizer = PegasusTokenizer.from_pretrained(model_name)
 model = PegasusForConditionalGeneration.from_pretrained(model_name)
+summarizer = pipeline("summarization")
 
 
 
@@ -81,7 +79,7 @@ for company_name in watchlist:
         story_df = []
         
         #Find news titles with "company_name" in title
-        search = gn.search(f'intitle:{company_name}', when = '1d')
+        search = gn.search(f'intitle:{company_name}', when = '3d')
         
         print("\n\nWebscraping: ", company_name,"\n")
         
@@ -89,10 +87,10 @@ for company_name in watchlist:
         #Loop through dictionary 'search entries' to get Headline, URL etc and convert to a dataframe
         for item in search['entries']:
             story_info = []
-            story_info = {'Headline': item.title , 'URL': item.link}
+            story_info = {'Search Headline': item.title , 'URL': item.link}
             story_info['Company'] = company_name
             story_list.append(story_info)
-            story_df = pd.DataFrame(story_list, columns =['Company','Headline', 'URL'])
+            story_df = pd.DataFrame(story_list, columns =['Company','Search Headline', 'URL'])
     
     
         
@@ -155,6 +153,64 @@ for company_name in watchlist:
 
         
         articles = scrape_and_process(list(story_df['URL'])) 
+        
+        
+        
+        
+        big_summary = []
+        
+        
+        def chunk_summarise_agg(articles):
+            
+            for x in articles:
+                # # 3. Chunk Text
+                max_chunk = 200
+                
+                ARTICLE = x.replace('. ', '.<eos>')
+                ARTICLE = ARTICLE.replace('? ', '?<eos>')
+                ARTICLE = ARTICLE.replace('! ', '!<eos>')
+                
+                
+                sentences = ARTICLE.split('<eos>')
+                current_chunk = 0 
+                chunks = []
+                
+                for sentence in sentences:
+                    if len(chunks) == current_chunk + 1: #create a new chunk +1
+                        if len(chunks[current_chunk]) + len(sentence.split(' ')) <= max_chunk:
+                            chunks[current_chunk].extend(sentence.split(' '))
+                        else:
+                            current_chunk += 1 #create new chunk +1 for portion greater than max chunk
+                            chunks.append(sentence.split(' '))
+                    else:
+                        chunks.append(sentence.split(' '))
+                
+                for chunk_id in range(len(chunks)):
+                    chunks[chunk_id] = ' '.join(chunks[chunk_id])
+                    chunks[chunk_id] = chunks[chunk_id].replace(' .', '.')
+                    chunks[chunk_id] = chunks[chunk_id].replace('  ', ' ')
+                    print("\n\n\Chunks: ",chunks)
+                    
+            
+                # # 4. Summarize Text       
+                res = summarizer(chunks, max_length=80, min_length=4, do_sample=False)
+                
+                #' '.join([summ['summary_text'] for summ in res])
+        
+                text = ' '.join([summ['summary_text'] for summ in res])
+                
+                text = text.replace(' .', '.')
+                text = text.replace('  ', ' ')
+                
+                print("\ntext combined: ",text)
+                
+                big_summary.append(text)
+                
+            return big_summary
+        
+        chunk_summarise_agg(list(articles))
+                
+        
      
         
         #Summarise all Articles by passing in list of articles scraped.
@@ -162,11 +218,12 @@ for company_name in watchlist:
         def summarize(articles):
             summaries = []
             for article in articles:
-                input_ids = tokenizer.encode(article[:500], return_tensors="pt") #We can only summarise about 300 words
+                input_ids = tokenizer.encode(article[:350], return_tensors="pt") #We can only summarise about 300 words at a time with Pegasus
                 output = model.generate(input_ids, max_length=100,min_length=5,num_beams=5, early_stopping=True)
                 summary = tokenizer.decode(output[0], skip_special_tokens=True)
                 summaries.append(summary)
             return summaries
+        
         
         summaries = summarize(articles)
         
@@ -180,7 +237,7 @@ for company_name in watchlist:
         
         #Create new dataframe model_results for full & summarised text and sentiment score.
         model_results = []
-        model_results = pd.DataFrame(list(zip(articles,summaries,scores)),columns =['Full Article','AI Headline', 'Sentiment Score'])
+        model_results = pd.DataFrame(list(zip(articles,summaries,big_summary,scores)),columns =['Full Article','AI Headline','AI Summary', 'Sentiment Score'])
         
     
         #Combined web scraped information with model results into a new combined dataframe 
@@ -192,7 +249,11 @@ for company_name in watchlist:
         
     except:
         print("\n**** No articles for ", company_name," ****\n")
-    
-master_df = pd.concat(master_df)
-master_df.to_excel("nltk_scrape_results.xls")
+
+if len(master_df) > 1:
+    master_df = pd.concat(master_df)
+    master_df.to_excel("scrape_results.xls")
+
+else:
+    master_df.to_excel("scrape_results.xls")
 
