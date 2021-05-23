@@ -1,0 +1,198 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sun May 23 09:15:01 2021
+
+@author: micud
+
+
+url = 'https://www.fool.co.uk/investing/2021/05/21/the-trainline-share-price-steadies-after-thursdays-20-crash-should-i-buy/'
+
+article = Article(url)
+
+#Do some NLP
+
+article.download()
+article.parse()
+
+
+
+article.nlp()
+
+#Get article text
+article_text = article.text
+
+#Get the author
+author_list = article.authors
+
+#Get publish date
+publish_date = article.publish_date
+
+#Get top image
+image = article.top_image
+
+
+
+Key packages used:
+pygooglenews = reliable package to scrape URL results to overcome beautiful soup issues on my end. https://github.com/kotartemiy/pygooglenews
+beautifulsoup = used to scrape text in webpages
+nltk = 
+financial-summarization-pegasus = Deep Learning model that has been pretrained specifically for Financial summarization
+
+"""
+import nltk
+from newspaper import Article
+#nltk.download('punkt')
+nltk.download('punkt')
+import pandas as pd
+from bs4 import BeautifulSoup
+import requests
+from pygooglenews import GoogleNews
+from transformers import PegasusTokenizer, PegasusForConditionalGeneration
+from transformers import pipeline
+import re
+
+#Specify Watchlist
+watchlist = ['Sumo Digital','Ocado','IQE','Trainline']
+
+
+
+#Specify Region
+gn = GoogleNews(country = 'UK')
+
+
+
+#Setup AI Model using Pegasus which has been trained for Financial Summarization
+model_name = "human-centered-summarization/financial-summarization-pegasus"
+tokenizer = PegasusTokenizer.from_pretrained(model_name)
+model = PegasusForConditionalGeneration.from_pretrained(model_name)
+
+
+
+#This will be the final dataframe output where results for each company will be appended
+master_df = []
+
+for company_name in watchlist:
+    
+    #company_name = 'Ocado'
+    
+    try:
+
+        story_list = []
+        story_df = []
+        
+        #Find news titles with "company_name" in title
+        search = gn.search(f'intitle:{company_name}', when = '1d')
+        
+        print("\n\nWebscraping: ", company_name,"\n")
+        
+        
+        #Loop through dictionary 'search entries' to get Headline, URL etc and convert to a dataframe
+        for item in search['entries']:
+            story_info = []
+            story_info = {'Headline': item.title , 'URL': item.link}
+            story_info['Company'] = company_name
+            story_list.append(story_info)
+            story_df = pd.DataFrame(story_list, columns =['Company','Headline', 'URL'])
+    
+    
+        
+        #Scrape articles from dataframe list story_df['URL']. Articles are limited to 300 words (Model/Hardware Limitation).
+        print(f'Scraping {company_name} news links.')
+        
+        '''
+        #scrape using beautifulsoup. This was the old version but some websites didn't work
+        def scrape_and_process(URLs):
+            ARTICLES = []
+            for url in URLs:
+                #print('Reading: ',url)
+                r = requests.get(url)
+                soup = BeautifulSoup(r.text, 'html.parser')
+                results = soup.find_all('p')
+                text = [res.text for res in results]
+                words = ' '.join(text).split()[:300]
+                ARTICLE = ' '.join(words)
+                ARTICLES.append(ARTICLE)
+            return ARTICLES
+        '''
+        
+
+        #scrape using NLTK
+    
+        def scrape_and_process(URLs):
+            ARTICLES = []
+            for url in URLs:
+                try:
+                    article = Article(url)
+                    article.download()
+                    article.parse()
+                    article.nlp()
+                    
+                    #Get article text
+                    text = article.text
+                    
+                    #Remove tabs and whitespace
+                    text = re.sub('\s+',' ',text) 
+                    words = text.split(' ')
+                    
+                    ARTICLE = ' '.join(words)
+                    #print("\nArticle:\n",ARTICLE)
+                    print('URL Article retrieved with NLTK: ', url,'\n')
+                    
+                except: #if NLTK doesn't work, get article with BeautifulSoup
+                    r = requests.get(url)
+                    soup = BeautifulSoup(r.text, 'html.parser')
+                    results = soup.find_all('p')
+                    text = [res.text for res in results]
+                    words = ' '.join(text).split()
+                    ARTICLE = ' '.join(words)
+                    
+                    print('URL Article Failed with NLTK so trying with BeautifulSoup: ', url,'\n')
+                    
+                    
+                ARTICLES.append(ARTICLE)
+                
+            return ARTICLES
+
+        
+        articles = scrape_and_process(list(story_df['URL'])) 
+     
+        
+        #Summarise all Articles by passing in list of articles scraped.
+        print(f'Summarizing {company_name} articles.')
+        def summarize(articles):
+            summaries = []
+            for article in articles:
+                input_ids = tokenizer.encode(article[:500], return_tensors="pt") #We can only summarise about 300 words
+                output = model.generate(input_ids, max_length=100,min_length=5,num_beams=5, early_stopping=True)
+                summary = tokenizer.decode(output[0], skip_special_tokens=True)
+                summaries.append(summary)
+            return summaries
+        
+        summaries = summarize(articles)
+        
+        
+        #Apply Sentiment Analysis
+        print(f'Calculating {company_name} sentiment.')
+        scores = []
+        sentiment = pipeline("sentiment-analysis")
+        scores = sentiment(summaries)
+        
+        
+        #Create new dataframe model_results for full & summarised text and sentiment score.
+        model_results = []
+        model_results = pd.DataFrame(list(zip(articles,summaries,scores)),columns =['Full Article','AI Headline', 'Sentiment Score'])
+        
+    
+        #Combined web scraped information with model results into a new combined dataframe 
+        combined = []
+        combined = story_df.merge(model_results,left_index=True,right_index=True,how='outer')
+        
+        #Append to master_df with results from other companies. 
+        master_df.append(combined)
+        
+    except:
+        print("\n**** No articles for ", company_name," ****\n")
+    
+master_df = pd.concat(master_df)
+master_df.to_excel("nltk_scrape_results.xls")
+
