@@ -32,7 +32,7 @@ image = article.top_image
 Key packages used:
 pygooglenews = reliable package to scrape URL results to overcome beautiful soup issues on my end. https://github.com/kotartemiy/pygooglenews
 beautifulsoup = used to scrape text in webpages
-nltk = another version of beautifulsoup and seems more reliable
+nltk = 
 financial-summarization-pegasus = Deep Learning model that has been pretrained specifically for Financial summarization
 
 """
@@ -56,7 +56,7 @@ import numpy as np
 #Specify Watchlist
 #watchlist = ['Sumo Digital','Ocado','IQE','Trainline','Dotdigital']
 
-watchlist = {'Sumo Group Plc':'SUMO.L','Ocado':'OCDO.L','IQE':'IQE.L','Trainline':'TRN.L','Dotdigital':'DOTD.L','NCC plc':'NCC.L'}
+watchlist = {'Sumo Group Plc':'SUMO.L','Ocado':'OCDO.L','IQE':'IQE.L','Trainline':'TRN.L','Dotdigital':'DOTD.L','NCC plc':'NCC.L','MusicMagpie':'MMAG.L','Royal Mail':'RMG.L','Oxford Instruments plc':'OXIG.L'}
 
 
 #Specify Region
@@ -120,7 +120,7 @@ for company_name, ticker in watchlist.items():
         story_df = []
         
         #Find news titles with "company_name" in title
-        search = gn.search(f'intitle:{company_name}', when = '90d')
+        search = gn.search(f'intitle:{company_name}', when = '3d')
         
         print("\n\nWebscraping: ", company_name,"\n")
         
