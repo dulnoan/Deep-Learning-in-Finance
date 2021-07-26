@@ -1,0 +1,82 @@
+"""
+The converts long URL Articles into a Summary
+
+"""
+
+# # 0. Installing Transformers and Importing Dependencies
+
+#get_ipython().system('pip install transformers')
+from transformers import pipeline
+from bs4 import BeautifulSoup
+import requests
+import os
+
+os.chdir(r"C:\Users\micud\Desktop")
+
+
+# # 1. Load Summarization Pipeline
+summarizer = pipeline("summarization")
+
+# # 2. Get Blog Post from Medium
+URL = "https://www.ocadogroup.com/investors/annual-report"
+#URL = "https://polaris.brighterir.com/public/iqe/news/rns/story/xjqzdgr"
+
+r = requests.get(URL)
+
+soup = BeautifulSoup(r.text, 'html.parser')
+results = soup.find_all(['h1', 'p'])
+test = r.text
+text = [result.text for result in results]
+ARTICLE = ' '.join(text)
+#ARTICLE
+print(len(ARTICLE))
+
+# # 3. Chunk Text
+max_chunk = 500
+
+ARTICLE = ARTICLE.replace('.', '.<eos>')
+ARTICLE = ARTICLE.replace('?', '?<eos>')
+ARTICLE = ARTICLE.replace('!', '!<eos>')
+
+
+sentences = ARTICLE.split('<eos>')
+current_chunk = 0 
+chunks = []
+
+for sentence in sentences:
+    if len(chunks) == current_chunk + 1: #create a new chunk +1
+        if len(chunks[current_chunk]) + len(sentence.split(' ')) <= max_chunk:
+            chunks[current_chunk].extend(sentence.split(' '))
+        else:
+            current_chunk += 1 #create new chunk +1 for portion greater than max chunk
+            chunks.append(sentence.split(' '))
+    else:
+        print(current_chunk)
+        chunks.append(sentence.split(' '))
+
+for chunk_id in range(len(chunks)):
+    chunks[chunk_id] = ' '.join(chunks[chunk_id])
+
+#len(chunks)
+
+
+# # 4. Summarize Text
+
+res = summarizer(chunks, max_length=100, min_length=5, do_sample=False)
+
+#res[0].keys()  to see what keys i.e 'summary_text' to get the value/body of text
+#res[0](['summary_text'])
+
+
+' '.join([summ['summary_text'] for summ in res])
+
+
+text = ' '.join([summ['summary_text'] for summ in res])
+
+
+# # 5. Output to Text File
+
+
+with open('longsummary.txt', 'w') as f:
+    f.write(text)
+
